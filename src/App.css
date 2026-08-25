@@ -4934,3 +4934,280 @@ button, input, textarea {
   color: #9BB7AA;
   font-style: italic;
 }
+
+
+/* ==========================================================
+   CHAINWALL SOCIAL DASHBOARD REFRESH
+   Hivey-inspired layout, ChainWall identity
+   ========================================================== */
+
+@media (min-width: 901px) {
+  .dashboard-page {
+    padding-left: 236px;
+  }
+
+  .dashboard-page .dashboard-nav {
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 236px;
+    height: 100vh;
+    padding: 28px 18px;
+    border-right: 1px solid rgba(57, 230, 165, 0.12);
+    border-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    background:
+      radial-gradient(circle at 0% 10%, rgba(57, 230, 165, 0.08), transparent 32%),
+      linear-gradient(180deg, #09120f 0%, #070b09 100%);
+    box-shadow: 18px 0 55px rgba(0, 0, 0, 0.24);
+  }
+
+  .dashboard-page .dashboard-nav .brand-button {
+    width: 100%;
+    justify-content: flex-start;
+    margin-bottom: 32px;
+  }
+
+  .dashboard-page .dashboard-nav .app-desktop-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    width: 100%;
+  }
+
+  .dashboard-page .dashboard-nav .app-desktop-nav button {
+    width: 100%;
+    min-height: 45px;
+    padding: 0 14px;
+    border-radius: 12px;
+    text-align: left;
+    justify-content: flex-start;
+    color: #8da79c;
+    background: transparent;
+  }
+
+  .dashboard-page .dashboard-nav .app-desktop-nav button:hover,
+  .dashboard-page .dashboard-nav .app-desktop-nav button.active {
+    color: #39e6a5;
+    background: rgba(57, 230, 165, 0.075);
+  }
+
+  .dashboard-page .dashboard-nav .systematic-wallet {
+    margin-top: auto;
+    padding-top: 18px;
+    border-top: 1px solid rgba(57, 230, 165, 0.10);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .dashboard-page .dashboard-nav .profile-mini {
+    width: 100%;
+  }
+
+  .dashboard-page .dashboard-nav .wallet-controls {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dashboard-page .dashboard-nav .wallet-address {
+    display: block;
+    padding: 10px 11px;
+    border: 1px solid rgba(57, 230, 165, 0.10);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .dashboard-page .dashboard-nav .disconnect-small {
+    width: 100%;
+  }
+
+  .dashboard-page .dashboard-container {
+    width: min(1320px, 94%);
+    padding-top: 42px;
+  }
+
+  .dashboard-page .dashboard-welcome {
+    padding: 8px 4px 0;
+  }
+
+  .dashboard-page .dashboard-main-grid {
+    grid-template-columns: minmax(0, 1.7fr) minmax(285px, 0.7fr);
+    gap: 22px;
+  }
+
+  .dashboard-page .dashboard-feed-panel {
+    padding: 24px;
+    border-radius: 22px;
+  }
+
+  .dashboard-page .dashboard-side {
+    top: 28px;
+  }
+}
+
+/* Dashboard cards feel more social than finance/analytics. */
+.dashboard-page .dashboard-stat-card {
+  min-height: 112px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(57, 230, 165, 0.065), transparent 42%),
+    linear-gradient(145deg, rgba(16, 31, 27, 0.95), rgba(8, 14, 12, 0.98));
+}
+
+.dashboard-page .dashboard-stat-card strong {
+  color: #effaf5;
+}
+
+.dashboard-page .dashboard-feed-panel {
+  background:
+    linear-gradient(145deg, rgba(14, 30, 25, 0.96), rgba(8, 14, 12, 0.98));
+}
+
+.dashboard-page .dashboard-post {
+  border-color: rgba(57, 230, 165, 0.10);
+  background: rgba(4, 11, 9, 0.52);
+}
+
+.dashboard-page .dashboard-post:hover {
+  border-color: rgba(57, 230, 165, 0.24);
+  background: rgba(57, 230, 165, 0.025);
+}
+
+.dashboard-page .dashboard-identity-card,
+.dashboard-page .dashboard-quick-card,
+.dashboard-page .dashboard-status-card {
+  background:
+    linear-gradient(145deg, rgba(16, 34, 29, 0.96), rgba(8, 14, 12, 0.98));
+}
+
+/* Post media */
+.post-media-image {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: cover;
+  margin: 14px 0 4px;
+  border: 1px solid rgba(57, 230, 165, 0.12);
+  border-radius: 16px;
+  background: #050908;
+}
+
+.dashboard-media-image {
+  max-height: 360px;
+}
+
+.post-image-preview-wrap {
+  margin-top: 16px;
+  padding: 10px;
+  border: 1px solid rgba(57, 230, 165, 0.14);
+  border-radius: 16px;
+  background: rgba(57, 230, 165, 0.025);
+}
+
+.post-image-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 4px 9px;
+  color: #8fa99f;
+  font-size: 11px;
+}
+
+.post-image-remove {
+  border: 0;
+  background: transparent;
+  color: #ff9aae;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.post-image-preview {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.compose-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.image-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(57, 230, 165, 0.14);
+  border-radius: 9px;
+  background: rgba(57, 230, 165, 0.045);
+  color: #8fe7c2;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.image-upload-btn:hover {
+  border-color: rgba(57, 230, 165, 0.30);
+  background: rgba(57, 230, 165, 0.08);
+}
+
+.image-upload-btn input {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .dashboard-page {
+    padding-left: 0;
+  }
+
+  .dashboard-page .dashboard-nav {
+    position: sticky;
+    top: 0;
+    height: auto;
+  }
+
+  .dashboard-page .dashboard-nav .app-desktop-nav {
+    display: none;
+  }
+
+  .dashboard-page .dashboard-container {
+    padding-top: 30px;
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-page .dashboard-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-page .dashboard-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .dashboard-side {
+    position: static;
+  }
+
+  .post-media-image {
+    max-height: 360px;
+    border-radius: 13px;
+  }
+
+  .compose-tools {
+    gap: 8px;
+  }
+}

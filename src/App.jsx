@@ -17,6 +17,33 @@ const supabase = SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
+const POST_IMAGE_BUCKET = "post-images";
+const POST_IMAGE_TOKEN_PREFIX = "[[CHAINWALL_IMAGE:";
+const POST_IMAGE_TOKEN_SUFFIX = "]]";
+
+function parsePostContent(rawContent = "") {
+  const raw = String(rawContent || "");
+  const match = raw.match(
+    /\s*\[\[CHAINWALL_IMAGE:(https?:\/\/[^\]]+)\]\]\s*$/
+  );
+
+  if (!match) {
+    return { text: raw, imageUrl: "" };
+  }
+
+  return {
+    text: raw.slice(0, match.index).trim(),
+    imageUrl: match[1],
+  };
+}
+
+function buildPostContent(text, imageUrl = "") {
+  const cleanText = String(text || "").trim();
+  if (!imageUrl) return cleanText;
+  const base = cleanText || "Image post";
+  return `${base}\n${POST_IMAGE_TOKEN_PREFIX}${imageUrl}${POST_IMAGE_TOKEN_SUFFIX}`;
+}
+
 // Small in-memory profile cache so the UI can still render profile avatars
 // synchronously while Supabase data is being loaded.
 const profileCache = new Map();
@@ -570,6 +597,8 @@ function App() {
   const [avatarInput, setAvatarInput] = useState("");
 
   const [content, setContent] = useState("");
+  const [postImageFile, setPostImageFile] = useState(null);
+  const [postImagePreview, setPostImagePreview] = useState("");
 
   const [messages, setMessages] = useState([]);
 
@@ -1085,7 +1114,16 @@ function App() {
       return false;
     }
 
-    if (trimmed.length > 500) {
+    const existingMedia = parsePostContent(
+      editingMessage?.content || ""
+    ).imageUrl;
+
+    const updatedContent = buildPostContent(
+      trimmed,
+      existingMedia
+    );
+
+    if (updatedContent.length > 500) {
       setError("Message cannot be longer than 500 characters.");
       return false;
     }
@@ -1096,7 +1134,7 @@ function App() {
       setSuccess("Waiting for the edit transaction...");
 
       const contract = await getContract(true);
-      const transaction = await contract.editMessage(messageId, trimmed);
+      const transaction = await contract.editMessage(messageId, updatedContent);
       await transaction.wait();
 
       setEditingMessage(null);
@@ -1183,6 +1221,75 @@ function App() {
   }
 
   /* =====================================================
+     POST IMAGE
+  ===================================================== */
+
+  function handlePostImageChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image must be 5 MB or smaller.");
+      return;
+    }
+
+    setError("");
+    setPostImageFile(file);
+
+    const reader = new FileReader();
+    reader.onload = () => setPostImagePreview(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  }
+
+  function removePostImage() {
+    setPostImageFile(null);
+    setPostImagePreview("");
+  }
+
+  async function uploadPostImage() {
+    if (!postImageFile) return "";
+
+    if (!supabase) {
+      throw new Error(
+        "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+      );
+    }
+
+    const extension =
+      postImageFile.name.split(".").pop()?.toLowerCase() || "jpg";
+    const walletFolder = (account || "anonymous").toLowerCase();
+    const uniqueName =
+      `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
+
+    const path = `${walletFolder}/${uniqueName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(POST_IMAGE_BUCKET)
+      .upload(path, postImageFile, {
+        contentType: postImageFile.type,
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error(
+        `Image upload failed. Make sure the public "${POST_IMAGE_BUCKET}" bucket exists in Supabase. ${uploadError.message}`
+      );
+    }
+
+    const { data } = supabase.storage
+      .from(POST_IMAGE_BUCKET)
+      .getPublicUrl(path);
+
+    return data?.publicUrl || "";
+  }
+
+  /* =====================================================
      POST MESSAGE
   ===================================================== */
 
@@ -1205,26 +1312,39 @@ function App() {
 
     const message = content.trim();
 
-    if (!message) {
-      setError("Please write a message.");
+    if (!message && !postImageFile) {
+      setError("Write a message or add an image.");
       return;
     }
 
     if (message.length > 500) {
-      setError(
-        "Message cannot be longer than 500 characters."
-      );
+      setError("Message cannot be longer than 500 characters.");
       return;
     }
 
     try {
       setLoading(true);
 
+      let imageUrl = "";
+      if (postImageFile) {
+        setSuccess("Uploading image...");
+        imageUrl = await uploadPostImage();
+      }
+
+      const onChainContent = buildPostContent(message, imageUrl);
+
+      if (onChainContent.length > 500) {
+        setError(
+          "The message plus image reference is too long. Shorten the message or use a smaller filename."
+        );
+        return;
+      }
+
       const contract = await getContract(true);
 
       const transaction = await contract.postMessage(
         profile.username,
-        message
+        onChainContent
       );
 
       setSuccess(
@@ -1240,6 +1360,7 @@ function App() {
       );
 
       setContent("");
+      removePostImage();
 
       await loadMessages();
 
@@ -1818,6 +1939,9 @@ function App() {
           postMessage={postMessage}
           openGlobal={openGlobal}
           formatAddress={formatAddress}
+          postImagePreview={postImagePreview}
+          handlePostImageChange={handlePostImageChange}
+          removePostImage={removePostImage}
         />
       )}
 
@@ -1974,7 +2098,7 @@ function LandingPage({
         <nav className="desktop-nav app-desktop-nav landing-nav-links">
           <button onClick={goHome}>Home</button>
           <button onClick={openDashboard}>Dashboard</button>
-          <button onClick={() => { window.location.assign("https://faucet.circle.com/?allow=true"); }}>Faucet</button>
+          <button onClick={() => { window.open("https://faucet.circle.com/?allow=true", "_blank", "noopener,noreferrer"); }}>Faucet</button>
           <button onClick={openProfile}>Profile</button>
         </nav>
 
@@ -2561,7 +2685,7 @@ function DashboardPage({
           <button onClick={openGlobal}>Global Wall</button>
           <button
             onClick={() => {
-              window.location.assign("https://faucet.circle.com/?allow=true");
+              window.open("https://faucet.circle.com/?allow=true", "_blank", "noopener,noreferrer");
             }}
           >
             Faucet
@@ -2731,7 +2855,7 @@ function DashboardPage({
                                         onClick={() => {
                                           const age = Date.now() / 1000 - message.timestamp;
                                           if (age > 15 * 60) return;
-                                          setEditDraft(message.content);
+                                          setEditDraft(parsePostContent(message.content).text);
                                           setEditingMessage(message);
                                           setOpenMenuId(null);
                                         }}
@@ -2782,11 +2906,26 @@ function DashboardPage({
                         </div>
                       </div>
 
-                      <p className={`dashboard-post-content ${message.deleted ? "post-body-deleted" : ""}`}>
-                        {message.deleted
-                          ? "This message was deleted by the author."
-                          : message.content}
-                      </p>
+                      {(() => {
+                        const media = parsePostContent(message.content);
+                        return (
+                          <>
+                            <p className={`dashboard-post-content ${message.deleted ? "post-body-deleted" : ""}`}>
+                              {message.deleted
+                                ? "This message was deleted by the author."
+                                : media.text}
+                            </p>
+                            {!message.deleted && media.imageUrl && (
+                              <img
+                                className="post-media-image dashboard-media-image"
+                                src={media.imageUrl}
+                                alt="Post attachment"
+                                loading="lazy"
+                              />
+                            )}
+                          </>
+                        );
+                      })()}
 
                       <div className="dashboard-post-meta">
                         <span>
@@ -2917,8 +3056,10 @@ function DashboardPage({
 
               <button
                 onClick={() => {
-                  window.location.assign(
-                    "https://faucet.circle.com/?allow=true"
+                  window.open(
+                    "https://faucet.circle.com/?allow=true",
+                    "_blank",
+                    "noopener,noreferrer"
                   );
                 }}
               >
@@ -3119,7 +3260,7 @@ function GlobalPage({
           <button onClick={goHome}>Home</button>
           <button onClick={openDashboard}>Dashboard</button>
           <button className="active" onClick={openGlobal}>Global Wall</button>
-          <button onClick={() => { window.location.assign("https://faucet.circle.com/?allow=true"); }}>Faucet</button>
+          <button onClick={() => { window.open("https://faucet.circle.com/?allow=true", "_blank", "noopener,noreferrer"); }}>Faucet</button>
           <button onClick={openProfile}>Profile</button>
         </nav>
 
@@ -3287,7 +3428,7 @@ function GlobalPage({
                                     onClick={() => {
                                       const age = Date.now() / 1000 - message.timestamp;
                                       if (age > 15 * 60) return;
-                                      setEditDraft(message.content);
+                                      setEditDraft(parsePostContent(message.content).text);
                                       setEditingMessage(message);
                                       setOpenMenuId(null);
                                     }}
@@ -3336,11 +3477,26 @@ function GlobalPage({
                     </div>
                   </div>
 
-                  <div className={`post-body ${message.deleted ? "post-body-deleted" : ""}`}>
-                    {message.deleted
-                      ? "This message was deleted by the author."
-                      : message.content}
-                  </div>
+                  {(() => {
+                    const media = parsePostContent(message.content);
+                    return (
+                      <>
+                        <div className={`post-body ${message.deleted ? "post-body-deleted" : ""}`}>
+                          {message.deleted
+                            ? "This message was deleted by the author."
+                            : media.text}
+                        </div>
+                        {!message.deleted && media.imageUrl && (
+                          <img
+                            className="post-media-image"
+                            src={media.imageUrl}
+                            alt="Post attachment"
+                            loading="lazy"
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
 
                   <div className="post-meta">
                     <span>
@@ -3664,6 +3820,9 @@ function ComposePage({
   postMessage,
   openGlobal,
   formatAddress,
+  postImagePreview,
+  handlePostImageChange,
+  removePostImage,
 }) {
   return (
     <div className="app-page">
@@ -3757,10 +3916,43 @@ function ComposePage({
             spellCheck={true}
           />
 
+          {postImagePreview && (
+            <div className="post-image-preview-wrap">
+              <div className="post-image-preview-header">
+                <span>Attached image</span>
+                <button
+                  type="button"
+                  className="post-image-remove"
+                  onClick={removePostImage}
+                  disabled={loading}
+                >
+                  Remove
+                </button>
+              </div>
+              <img
+                className="post-image-preview"
+                src={postImagePreview}
+                alt="Post preview"
+              />
+            </div>
+          )}
+
           <div className="compose-footer">
-            <span>
-              {content.length}/500
-            </span>
+            <div className="compose-tools">
+              <label className="image-upload-btn">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePostImageChange}
+                  disabled={loading}
+                />
+                <span>▧</span>
+                Add image
+              </label>
+              <span>
+                {content.length}/500
+              </span>
+            </div>
 
             <button
               className="primary-btn post-submit"
