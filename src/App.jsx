@@ -28,9 +28,9 @@ const ARC_TESTNET_NETWORK = {
   chainId: ARC_TESTNET_CHAIN_ID,
   chainName: "Arc Testnet",
   nativeCurrency: {
-    name: "USDC",
-    symbol: "USDC",
-    decimals: 6,
+    name: "Arc",
+    symbol: "Arc",
+    decimals: 18,
   },
   rpcUrls: ["https://rpc.testnet.arc.network"],
   blockExplorerUrls: ["https://testnet.arcscan.app"],
