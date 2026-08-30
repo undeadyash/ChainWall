@@ -21,6 +21,21 @@ const POST_IMAGE_BUCKET = "post-images";
 const POST_IMAGE_TOKEN_PREFIX = "[[CHAINWALL_IMAGE:";
 const POST_IMAGE_TOKEN_SUFFIX = "]]";
 
+// Arc Testnet network configuration.
+const ARC_TESTNET_CHAIN_ID = "0x4cef52"; // 5042002
+const ARC_TESTNET_CHAIN_ID_DECIMAL = 5042002;
+const ARC_TESTNET_NETWORK = {
+  chainId: ARC_TESTNET_CHAIN_ID,
+  chainName: "Arc Testnet",
+  nativeCurrency: {
+    name: "USDC",
+    symbol: "USDC",
+    decimals: 6,
+  },
+  rpcUrls: ["https://rpc.testnet.arc.network"],
+  blockExplorerUrls: ["https://testnet.arcscan.app"],
+};
+
 function parsePostContent(rawContent = "") {
   const raw = String(rawContent || "");
   const match = raw.match(
@@ -126,6 +141,57 @@ const CONTRACT_ABI = [
 /* =====================================================
    WALLET / CONTRACT HELPERS
 ===================================================== */
+
+async function switchToArcTestnet(injectedProvider = null) {
+  const ethereum = injectedProvider || window.ethereum;
+
+  if (!ethereum?.request) {
+    throw new Error("This wallet does not support network switching.");
+  }
+
+  try {
+    await ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: ARC_TESTNET_CHAIN_ID }],
+    });
+    return true;
+  } catch (switchError) {
+    // 4902 means Arc Testnet is not added to the wallet yet.
+    if (switchError?.code === 4902) {
+      await ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [ARC_TESTNET_NETWORK],
+      });
+
+      // Some wallets do not automatically switch after adding a chain.
+      try {
+        await ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: ARC_TESTNET_CHAIN_ID }],
+        });
+      } catch {
+        // The add request itself succeeded; the UI will still show the
+        // explicit switch button if the wallet did not switch automatically.
+      }
+
+      return true;
+    }
+
+    throw switchError;
+  }
+}
+
+async function isArcTestnet(injectedProvider = null) {
+  const ethereum = injectedProvider || window.ethereum;
+  if (!ethereum?.request) return false;
+
+  try {
+    const chainId = await ethereum.request({ method: "eth_chainId" });
+    return String(chainId).toLowerCase() === ARC_TESTNET_CHAIN_ID;
+  } catch {
+    return false;
+  }
+}
 
 function getProvider(injectedProvider = null) {
   const ethereum = injectedProvider || window.ethereum;
@@ -591,6 +657,7 @@ function App() {
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [walletOptions, setWalletOptions] = useState([]);
   const [activeWalletProvider, setActiveWalletProvider] = useState(null);
+  const [arcTestnetReady, setArcTestnetReady] = useState(false);
 
   const [usernameInput, setUsernameInput] = useState("");
   const [bioInput, setBioInput] = useState("");
@@ -671,6 +738,8 @@ function App() {
       const provider = getProvider(injectedProvider);
       setActiveWalletProvider(injectedProvider);
 
+      // Ask for the wallet connection first, then immediately move the user
+      // to Arc Testnet if their wallet opened on Ethereum or another chain.
       const accounts = await provider.send(
         "eth_requestAccounts",
         []
@@ -683,6 +752,22 @@ function App() {
       setWalletModalOpen(false);
 
       const connectedAccount = accounts[0];
+      let onArcTestnet = await isArcTestnet(injectedProvider);
+
+      if (!onArcTestnet) {
+        try {
+          await switchToArcTestnet(injectedProvider);
+          onArcTestnet = await isArcTestnet(injectedProvider);
+        } catch (networkError) {
+          console.warn("Unable to switch to Arc Testnet", networkError);
+        }
+      }
+
+      setArcTestnetReady(onArcTestnet);
+
+      if (!onArcTestnet) {
+        setError("You are connected to the wrong network. Please switch to Arc Testnet before posting.");
+      }
 
       const existingProfile =
         await loadProfileFromSupabase(connectedAccount);
@@ -714,9 +799,36 @@ function App() {
     }
   }
 
+  async function handleSwitchToArcTestnet() {
+    const injectedProvider = activeWalletProvider || window.ethereum;
+
+    try {
+      setError("");
+      await switchToArcTestnet(injectedProvider);
+      const ready = await isArcTestnet(injectedProvider);
+      setArcTestnetReady(ready);
+
+      if (ready) {
+        setSuccess("Connected to Arc Testnet.");
+      } else {
+        setError("Your wallet did not switch to Arc Testnet. Please select Arc Testnet in the wallet.");
+      }
+    } catch (err) {
+      console.error(err);
+      setArcTestnetReady(false);
+
+      if (err?.code === 4001) {
+        setError("Network switch was rejected in your wallet.");
+      } else {
+        setError(err?.shortMessage || err?.message || "Unable to switch to Arc Testnet.");
+      }
+    }
+  }
+
   function disconnectWallet() {
     setAccount("");
     setActiveWalletProvider(null);
+    setArcTestnetReady(false);
     setWalletModalOpen(false);
     setProfile(null);
     setPage("landing");
@@ -1304,6 +1416,11 @@ function App() {
       return;
     }
 
+    if (!arcTestnetReady) {
+      setError("Switch to Arc Testnet before posting on-chain.");
+      return;
+    }
+
     if (!profile) {
       setError("Please create your profile first.");
       setPage("profile");
@@ -1745,6 +1862,45 @@ function App() {
   }, []);
 
   /* =====================================================
+     ARC TESTNET NETWORK CHECK
+  ===================================================== */
+
+  useEffect(() => {
+    const provider = activeWalletProvider || window.ethereum;
+    if (!provider?.request) {
+      setArcTestnetReady(false);
+      return undefined;
+    }
+
+    let mounted = true;
+
+    async function checkNetwork() {
+      const ready = await isArcTestnet(provider);
+      if (mounted) setArcTestnetReady(ready);
+    }
+
+    checkNetwork();
+
+    const handleChainChanged = async () => {
+      const ready = await isArcTestnet(provider);
+      if (!mounted) return;
+      setArcTestnetReady(ready);
+      if (ready) {
+        setError("");
+      } else if (account) {
+        setError("You are on the wrong network. Switch to Arc Testnet to use ChainWall.");
+      }
+    };
+
+    provider.on?.("chainChanged", handleChainChanged);
+
+    return () => {
+      mounted = false;
+      provider.removeListener?.("chainChanged", handleChainChanged);
+    };
+  }, [activeWalletProvider, account]);
+
+  /* =====================================================
      ACCOUNT CHANGE
   ===================================================== */
 
@@ -1752,6 +1908,9 @@ function App() {
     if (!window.ethereum) return;
 
     async function handleAccountsChanged(accounts) {
+      const ready = await isArcTestnet(activeWalletProvider || window.ethereum);
+      setArcTestnetReady(ready);
+
       if (
         !accounts ||
         accounts.length === 0
@@ -1827,8 +1986,49 @@ function App() {
      APP RENDER
   ===================================================== */
 
+  const networkBanner = account && !arcTestnetReady ? (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "14px",
+        padding: "11px 18px",
+        background: "#241b0a",
+        borderBottom: "1px solid rgba(255,184,77,.45)",
+        color: "#ffe3ad",
+        fontSize: "14px",
+        lineHeight: 1.35,
+      }}
+    >
+      <span>⚠️ You’re connected to the wrong network. ChainWall uses Arc Testnet.</span>
+      <button
+        type="button"
+        onClick={handleSwitchToArcTestnet}
+        style={{
+          border: "1px solid rgba(255,255,255,.16)",
+          borderRadius: "999px",
+          padding: "7px 13px",
+          background: "#9ee65c",
+          color: "#10150d",
+          fontWeight: 800,
+          cursor: "pointer",
+        }}
+      >
+        Switch to Arc Testnet
+      </button>
+    </div>
+  ) : null;
+
   return (
     <>
+      {networkBanner}
+
       <WalletModal
         open={walletModalOpen}
         wallets={walletOptions}
